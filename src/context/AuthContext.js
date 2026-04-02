@@ -53,13 +53,17 @@ export const AuthProvider = ({ children }) => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         setUser(firebaseUser);
-        try {
-          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-          if (userDoc.exists()) {
-            setRole(userDoc.data().role);
+        if (!db) {
+          console.error('AuthContext: db is undefined — firebase.js may not export getFirestore().');
+        } else {
+          try {
+            const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+            if (userDoc.exists()) {
+              setRole(userDoc.data().role);
+            }
+          } catch (error) {
+            console.error('Error fetching user role:', error);
           }
-        } catch (error) {
-          console.error('Error fetching user role:', error);
         }
       } else {
         setUser(null);
