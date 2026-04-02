@@ -48,6 +48,11 @@ export const addToOfflineQueue = async (activity) => {
  */
 export const flushOfflineQueue = async () => {
   try {
+    if (!db) {
+      console.error('flushOfflineQueue: db is undefined — cannot sync.');
+      return 0;
+    }
+
     const raw = await AsyncStorage.getItem(QUEUE_KEY);
     if (!raw) return 0;
 
