@@ -112,7 +112,7 @@ const PatientHomeScreen = () => {
           >
             <Text style={styles.buttonLabel}>{activity.label}</Text>
           </TouchableOpacity>
-        ))}
+        ))
       )}
     </View>
   );
