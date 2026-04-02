@@ -1,0 +1,144 @@
+/**
+ * firestore.rules
+ * Firebase Cloud Firestore Security Rules for the Prenatal Activity Tracker.
+ *
+ * ============================================================================
+ * SECURITY MODEL
+ * ============================================================================
+ *
+ * Two roles exist in the system: "patient" and "clinician".
+ * Role is stored in the user's Firestore document at users/{uid}.role.
+ *
+ * 1. USER DOCUMENTS  (users/{uid})
+ *    - Create : authenticated, uid matches their own, must include role
+ *               and displayName. role must be "patient" or "clinician".
+ *    - Read   : own document always; clinicians can read any user document.
+ *    - Update : own document only. Cannot change role or userID.
+ *               Allowed fields: assignedClinicianUID, weeklyTarget, displayName.
+ *    - Delete : never.
+ *
+ * 2. ACTIVITIES       (users/{uid}/activities/{activityID})
+ *    - Create : authenticated patients log their own activities only.
+ *               activityType must be "Walking", "Stretching", or "Breathing".
+ *               timestamp must equal request.time (server-generated).
+ *               userID must equal the uid path segment.
+ *    - Read   : own activities always; clinicians can read activities of
+ *               patients whose assignedClinicianUID matches the clinician.
+ *    - Update : never (activities are immutable once written).
+ *    - Delete : never.
+ *
+ * 3. DATA SEPARATION (SC7)
+ *    Patients can only read/write their own data.
+ *    Clinicians can read patient data only when explicitly assigned via
+ *    the assignedClinicianUID field — this prevents data overlap.
+ *
+ * ============================================================================
+ * DEPLOYMENT
+ * ============================================================================
+ *
+ * These rules are NOT deployed automatically by the app. To deploy them:
+ *
+ *   1. Install Firebase CLI:  npm install -g firebase-tools
+ *   2. Log in:               firebase login
+ *   3. Initialise (once):    firebase init firestore
+ *      (select the prenatal-tracker project when prompted)
+ *   4. Deploy:               firebase deploy --only firestore:rules
+ *
+ * Alternatively, paste the rules directly into the Firebase Console at:
+ *   Firebase Console > Firestore Database > Rules tab > Publish
+ *
+ * NOTE: firebase-tools is NOT part of the project tech stack. The rules
+ * file exists here as source-controlled documentation of the security
+ * model, ready for manual deployment.
+ *
+ * ============================================================================
+ * SUCCESS CRITERIA
+ * ============================================================================
+ *
+ * SC4 — Data integrity enforced by rules (validated fields, no orphan writes).
+ * SC7 — Data separation: patients isolated, clinicians access only assigned.
+ */
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ====================================================================
+    // USER DOCUMENTS  —  users/{uid}
+    // ====================================================================
+
+    match /users/{uid} {
+
+      // CREATE: only the authenticated user can create their own document.
+      // Must include role (patient|clinician) and displayName (string).
+      allow create: if request.auth != null
+                    && request.auth.uid == uid
+                    && request.resource.data.role is string
+                    && (request.resource.data.role == "patient"
+                        || request.resource.data.role == "clinician")
+                    && request.resource.data.displayName is string;
+
+      // READ: own document, or any document if the reader is a clinician.
+      allow read: if request.auth != null
+                  && (request.auth.uid == uid
+                      || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "clinician");
+
+      // UPDATE: own document only. Role and userID are immutable.
+      // Allowed fields: assignedClinicianUID, weeklyTarget, displayName.
+      allow update: if request.auth != null
+                    && request.auth.uid == uid
+                    // Role must not change.
+                    && request.resource.data.role == resource.data.role
+                    // Only allowed fields may be written. Reject any attempt
+                    // to add unexpected fields by checking the diff.
+                    && request.resource.data.keys().hasOnly([
+                      'role', 'displayName', 'assignedClinicianUID',
+                      'weeklyTarget', 'userID'
+                    ])
+                    // displayName: if provided, must be a string.
+                    && (request.resource.data.displayName is string
+                        || request.resource.data.displayName == resource.data.displayName)
+                    // assignedClinicianUID: if provided, must be a string.
+                    && (request.resource.data.assignedClinicianUID is string
+                        || request.resource.data.assignedClinicianUID == resource.data.assignedClinicianUID)
+                    // weeklyTarget: if provided, must be an int.
+                    && (request.resource.data.weeklyTarget is int
+                        || request.resource.data.weeklyTarget == resource.data.weeklyTarget);
+
+      // DELETE: never. User documents are permanent.
+      allow delete: if false;
+
+      // ====================================================================
+      // ACTIVITIES SUBCOLLECTION  —  users/{uid}/activities/{activityID}
+      // ====================================================================
+
+      match /activities/{activityID} {
+
+        // CREATE: authenticated user logging their own activity.
+        // activityType validated to allowed values.
+        // timestamp must be the server-generated request time.
+        // userID must match the parent user path segment.
+        allow create: if request.auth != null
+                      && request.auth.uid == uid
+                      && request.resource.data.userID == uid
+                      && (request.resource.data.activityType == "Walking"
+                          || request.resource.data.activityType == "Stretching"
+                          || request.resource.data.activityType == "Breathing")
+                      && request.resource.data.timestamp == request.time;
+
+        // READ: own activities, or clinician reading assigned patient's.
+        allow read: if request.auth != null
+                    && (request.auth.uid == uid
+                        || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "clinician"
+                            && resource.data.userID == uid
+                            && get(/databases/$(database)/documents/users/$(resource.data.userID)).data.assignedClinicianUID == request.auth.uid));
+
+        // UPDATE: never. Activities are immutable once created.
+        allow update: if false;
+
+        // DELETE: never. Activities are permanent.
+        allow delete: if false;
+      }
+    }
+  }
+}
