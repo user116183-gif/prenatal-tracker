@@ -1,6 +1,10 @@
 // firebase.example.js — copy to firebase.js and fill in your values
-// This file shows the shape of the Firebase configuration.
+// This file shows the full Firebase initialisation pattern.
 // firebase.js is gitignored because it contains real API keys.
+
+import { initializeApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
 
 /**
  * Firebase configuration object.
@@ -15,3 +19,12 @@ export const firebaseConfig = {
   messagingSenderId: "YOUR_SENDER_ID",
   appId: "YOUR_APP_ID"
 };
+
+/** Initialised Firebase app instance. */
+const app = initializeApp(firebaseConfig);
+
+/** Firebase Authentication instance. */
+export const auth = getAuth(app);
+
+/** Cloud Firestore instance. */
+export const db = getFirestore(app);
