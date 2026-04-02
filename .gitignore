@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Expo
+.expo/
+.expo-shared/
+
+# Firebase config (contains API keys — NEVER commit)
+firebase.js
+
+# Environment variables
+*.env
+.env.local
+
+# Native build folders (not needed for Expo managed workflow)
+ios/
+android/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
