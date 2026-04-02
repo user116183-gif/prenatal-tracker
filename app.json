@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "Prenatal Activity Tracker",
+    "slug": "prenatal-tracker",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.prenataltracker.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.prenataltracker.app"
+    }
+  }
+}
