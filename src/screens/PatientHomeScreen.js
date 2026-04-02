@@ -17,8 +17,8 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
@@ -35,6 +35,27 @@ const ACTIVITIES = [
   { key: 'stretching', label: 'Stretching', color: '#28a745', type: 'Stretching' },
   { key: 'breathing', label: 'Breathing', color: '#6f42c1', type: 'Breathing' },
 ];
+
+/**
+ * Cross-platform alert helper.
+ * React Native Web's Alert.alert polyfill is unreliable — it often
+ * silently does nothing. This helper falls back to window.alert on
+ * web so the user always gets feedback.
+ *
+ * @param {string} title - Alert title.
+ * @param {string} message - Alert body text.
+ * @returns {void}
+ */
+const showAlert = (title, message) => {
+  if (Platform.OS === 'web') {
+    window.alert(`${title}\n${message}`);
+  } else {
+    // Dynamic import keeps the native-only module out of the web bundle.
+    import('react-native').then(({ Alert }) => {
+      Alert.alert(title, message);
+    });
+  }
+};
 
 /**
  * PatientHomeScreen renders three large activity buttons.
@@ -57,7 +78,9 @@ const PatientHomeScreen = () => {
    */
   useEffect(() => {
     if (user) {
-      flushOfflineQueue();
+      flushOfflineQueue().catch((err) => {
+        console.warn('flushOfflineQueue failed on mount:', err.message);
+      });
     }
   }, [user]);
 
@@ -70,24 +93,40 @@ const PatientHomeScreen = () => {
    * @returns {Promise<void>}
    */
   const handleLogActivity = useCallback(async (activityType) => {
-    if (!user) return;
+    if (!user) {
+      console.warn('handleLogActivity: user is null — aborting.');
+      return;
+    }
+
+    if (!db) {
+      console.error('handleLogActivity: db is undefined — firebase.js may not export getFirestore().');
+      showAlert('Configuration Error', 'Firestore is not initialised. Check firebase.js.');
+      return;
+    }
+
     setLogging(true);
 
     try {
-      await addDoc(collection(db, `users/${user.uid}/activities`), {
+      const collectionRef = collection(db, `users/${user.uid}/activities`);
+      await addDoc(collectionRef, {
         userID: user.uid,
         activityType: activityType,
         timestamp: serverTimestamp(),
       });
-      Alert.alert('Logged!', `${activityType} activity recorded.`);
+      showAlert('Logged!', `${activityType} activity recorded.`);
     } catch (error) {
       // Firestore write failed — queue the activity offline.
       console.warn('Firestore write failed, queuing offline:', error.message);
-      await addToOfflineQueue({
-        userID: user.uid,
-        activityType: activityType,
-      });
-      Alert.alert('Saved offline', `${activityType} will sync when you reconnect.`);
+      try {
+        await addToOfflineQueue({
+          userID: user.uid,
+          activityType: activityType,
+        });
+        showAlert('Saved offline', `${activityType} will sync when you reconnect.`);
+      } catch (queueError) {
+        console.error('Offline queue write also failed:', queueError.message);
+        showAlert('Error', `Could not log activity: ${error.message}`);
+      }
     } finally {
       setLogging(false);
     }
