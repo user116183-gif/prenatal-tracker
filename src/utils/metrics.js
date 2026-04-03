@@ -10,7 +10,7 @@
  *
  * Exported functions:
  *   computeWeeklyTotal(activities)
- *   computeAdherence(activities, weeklyTarget)
+ *   computeAdherence(activities)
  *   computeStreak(activities)
  *
  * Success Criteria Addressed: SC4 (metric calculations)
@@ -86,40 +86,53 @@ const computeWeeklyTotal = (activities) => {
 };
 
 /**
+ * Returns the number of days elapsed in the current ISO week, counting
+ * from Monday to today (inclusive). Minimum return value is 1.
+ *
+ * If today is Monday, returns 1. If today is Wednesday, returns 3.
+ * If today is Sunday, returns 7.
+ *
+ * @returns {number} Days elapsed in the current ISO week (1 - 7).
+ */
+var getDaysElapsedInWeek = function () {
+  var now = new Date();
+  var day = now.getUTCDay();
+  // ISO day: Monday = 1, Sunday = 7. JS getUTCDay: Sunday = 0, Monday = 1.
+  var isoDay = day === 0 ? 7 : day;
+  return isoDay; // Monday=1, Tuesday=2, ..., Sunday=7
+};
+
+/**
  * Computes the adherence percentage for the current ISO week.
  *
- * Adherence is calculated as: (weeklyTotal / weeklyTarget) * 100
- * The result is capped at 100 — exceeding the target does not produce
- * a percentage greater than 100.
+ * The target is 3 activities per day multiplied by the number of days
+ * elapsed in the current ISO week (Monday through today, inclusive).
+ * Formula: (weeklyTotal / (daysElapsed * 3)) * 100, capped at 100.
+ *
+ * Examples:
+ * - Monday, all 3 done:   3 / (1 * 3) * 100 = 100%
+ * - Wednesday, 6 done:    6 / (3 * 3) * 100 = 66.7%
+ * - Wednesday, 9 done:    9 / (3 * 3) * 100 = 100%
+ * - Wednesday, 10 done:   10 / (3 * 3) * 100 = capped at 100%
  *
  * @param {Array<Object>} activities - Array of activity documents from Firestore.
  *   Each object must have a `timestamp` property that is a JS Date object.
- * @param {number} [weeklyTarget=7] - The target number of activities for the week.
- *   Defaults to 7 if not provided. If 0 or negative, returns 0 immediately.
- * @returns {number} The adherence percentage (0 – 100).
- *   Returns 0 if the array is empty, null, or weeklyTarget is not positive.
+ * @returns {number} The adherence percentage (0 - 100).
+ *   Returns 0 if the array is empty or null.
  *
  * @example
- * // 5 out of 7 activities completed this week.
- * const adherence = computeAdherence(activities);
- * // adherence === 71.42857142857143
- *
- * @example
- * // Custom target of 10.
- * const adherence = computeAdherence(activities, 10);
+ * // Today is Wednesday. User completed all 3 activities on Mon and Tue,
+ * // but none today (6 total).
+ * var adherence = computeAdherence(activities);
+ * // adherence === 66.666...
  */
-const computeAdherence = (activities, weeklyTarget) => {
+var computeAdherence = function (activities) {
   if (!activities || activities.length === 0) return 0;
 
-  // Guard against non-positive targets to avoid division by zero or negative results.
-  if (typeof weeklyTarget === 'number' && weeklyTarget <= 0) return 0;
-
-  const target = (typeof weeklyTarget === 'number' && weeklyTarget > 0)
-    ? weeklyTarget
-    : 7;
-
-  const weeklyTotal = computeWeeklyTotal(activities);
-  const percentage = (weeklyTotal / target) * 100;
+  var weeklyTotal = computeWeeklyTotal(activities);
+  var daysElapsed = getDaysElapsedInWeek();
+  var target = daysElapsed * 3;
+  var percentage = (weeklyTotal / target) * 100;
   return Math.min(percentage, 100);
 };
 
@@ -205,4 +218,4 @@ const computeStreak = (activities) => {
   return streak;
 };
 
-export { computeWeeklyTotal, computeAdherence, computeStreak };
+export { computeWeeklyTotal, computeAdherence, computeStreak, getDaysElapsedInWeek };

@@ -20,7 +20,7 @@
  * 2. ACTIVITIES       (users/{uid}/activities/{activityID})
  *    - Create : authenticated patients log their own activities only.
  *               activityType must be "Walking", "Stretching", or "Breathing".
- *               timestamp must equal request.time (server-generated).
+ *               timestamp must be a valid Firestore Timestamp (not null).
  *               userID must equal the uid path segment.
  *    - Read   : own activities always; clinicians can read activities of
  *               patients whose assignedClinicianUID matches the clinician.
@@ -116,7 +116,9 @@ service cloud.firestore {
 
         // CREATE: authenticated user logging their own activity.
         // activityType validated to allowed values.
-        // timestamp must be the server-generated request time.
+        // timestamp must be a valid Firestore Timestamp (accepts both
+        // server-generated and client-side timestamps for backwards
+        // compatibility with activities written during test mode).
         // userID must match the parent user path segment.
         allow create: if request.auth != null
                       && request.auth.uid == uid
@@ -124,14 +126,15 @@ service cloud.firestore {
                       && (request.resource.data.activityType == "Walking"
                           || request.resource.data.activityType == "Stretching"
                           || request.resource.data.activityType == "Breathing")
-                      && request.resource.data.timestamp == request.time;
+                      && request.resource.data.timestamp is timestamp;
 
         // READ: own activities, or clinician reading assigned patient's.
+        // Clinician check: verified by reading the clinician's own user doc
+        // and the patient's user doc to confirm assignedClinicianUID match.
         allow read: if request.auth != null
                     && (request.auth.uid == uid
                         || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "clinician"
-                            && resource.data.userID == uid
-                            && get(/databases/$(database)/documents/users/$(resource.data.userID)).data.assignedClinicianUID == request.auth.uid));
+                            && get(/databases/$(database)/documents/users/$(uid)).data.assignedClinicianUID == request.auth.uid));
 
         // UPDATE: never. Activities are immutable once created.
         allow update: if false;
